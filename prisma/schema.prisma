@@ -1,14 +1,274 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// This is your Prisma schema file for SPMB MAN 3 Kediri
+// Learn more: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  SISWA
+}
+
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
+enum Jalur {
+  REGULER
+  PRESTASI
+  AFIRMASI
+  GO_AKSIO
+}
+
+enum Peminatan {
+  UMUM
+  AGAMA
+}
+
+enum StatusSiswa {
+  SELEKSI      // Status A - Masa Seleksi
+  LULUS        // Status B - Lulus Seleksi
+  TIDAK_LULUS  // Tidak Lulus
+}
+
+enum StatusOrangTua {
+  HIDUP
+  MENINGGAL
+}
+
+enum TipeAlamat {
+  RUMAH
+  PONDOK
+}
+
+enum StatusPembayaran {
+  LUNAS
+  BELUM_LUNAS
+}
+
+// ==================== MODELS ====================
+
+// Tabel User untuk Autentikasi
+model User {
+  id              String   @id @default(uuid())
+  nomorRegistrasi String   @unique @map("nomor_registrasi")
+  password        String
+  role            Role     @default(SISWA)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  siswa Siswa?
+
+  @@map("users")
+}
+
+// Tabel Siswa - Data Utama
+model Siswa {
+  id            String       @id @default(uuid())
+  userId        String       @unique @map("user_id")
+  namaLengkap   String       @map("nama_lengkap")
+  email         String       @unique
+  jenisKelamin  JenisKelamin @map("jenis_kelamin")
+  jalur         Jalur
+  peminatan     Peminatan
+  status        StatusSiswa  @default(SELEKSI)
+  
+  // Data Tambahan (diisi saat daftar ulang)
+  tempatLahir   String?      @map("tempat_lahir")
+  tanggalLahir  DateTime?    @map("tanggal_lahir")
+  nik           String?      @db.VarChar(16)
+  nisn          String?      @db.VarChar(10)
+  noHp          String?      @map("no_hp")
+  asalSekolah   String?      @map("asal_sekolah")
+  tahunLulus    String?      @map("tahun_lulus")
+  
+  // Data Ujian (untuk Jalur Reguler)
+  ruangUjianId  String?      @map("ruang_ujian_id")
+  nomorKursi    Int?         @map("nomor_kursi")
+  passwordCbt   String?      @map("password_cbt") @db.VarChar(6)
+  kartuDicetak  Boolean      @default(false) @map("kartu_dicetak")
+  
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ruangUjian RuangUjian? @relation(fields: [ruangUjianId], references: [id])
+  orangTua   OrangTua[]
+  alamat     Alamat?
+  akademik   Akademik?
+  berkas     Berkas[]
+  pembayaran Pembayaran[]
+
+  @@map("siswa")
+}
+
+// Tabel Orang Tua
+model OrangTua {
+  id            String          @id @default(uuid())
+  siswaId       String          @map("siswa_id")
+  tipe          String          // "AYAH", "IBU", "WALI"
+  nama          String
+  status        StatusOrangTua  @default(HIDUP)
+  nik           String?         @db.VarChar(16)
+  tempatLahir   String?         @map("tempat_lahir")
+  tanggalLahir  DateTime?       @map("tanggal_lahir")
+  pendidikan    String?
+  pekerjaan     String?
+  penghasilan   String?
+  noHp          String?         @map("no_hp")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  siswa Siswa @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+
+  @@map("orang_tua")
+}
+
+// Tabel Alamat
+model Alamat {
+  id            String     @id @default(uuid())
+  siswaId       String     @unique @map("siswa_id")
+  tipeAlamat    TipeAlamat @default(RUMAH) @map("tipe_alamat")
+  alamatLengkap String?    @map("alamat_lengkap") @db.Text
+  rt            String?    @db.VarChar(3)
+  rw            String?    @db.VarChar(3)
+  desa          String?
+  kecamatan     String?
+  kabupaten     String?
+  provinsi      String?
+  kodePos       String?    @map("kode_pos") @db.VarChar(5)
+  pesantrenId   String?    @map("pesantren_id")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  siswa     Siswa      @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  pesantren Pesantren? @relation(fields: [pesantrenId], references: [id])
+
+  @@map("alamat")
+}
+
+// Tabel Akademik (Nilai Rapor)
+model Akademik {
+  id                  String   @id @default(uuid())
+  siswaId             String   @unique @map("siswa_id")
+  nilaiMatematika     Float?   @map("nilai_matematika")
+  nilaiBahasaIndonesia Float?  @map("nilai_bahasa_indonesia")
+  nilaiBahasaInggris  Float?   @map("nilai_bahasa_inggris")
+  nilaiIpa            Float?   @map("nilai_ipa")
+  nilaiIps            Float?   @map("nilai_ips")
+  rataRata            Float?   @map("rata_rata")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  siswa Siswa @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+
+  @@map("akademik")
+}
+
+// Tabel Berkas Upload
+model Berkas {
+  id        String   @id @default(uuid())
+  siswaId   String   @map("siswa_id")
+  jenis     String   // "KK", "IJAZAH", "FOTO", dll
+  namaFile  String   @map("nama_file")
+  path      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  siswa Siswa @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+
+  @@map("berkas")
+}
+
+// Tabel Ruang Ujian
+model RuangUjian {
+  id           String   @id @default(uuid())
+  namaRuang    String   @unique @map("nama_ruang")
+  kapasitas    Int      @default(30)
+  terisi       Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  siswa Siswa[]
+
+  @@map("ruang_ujian")
+}
+
+// Tabel Pesantren (Master Data)
+model Pesantren {
+  id        String   @id @default(uuid())
+  nama      String
+  alamat    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  alamatSiswa Alamat[]
+
+  @@map("pesantren")
+}
+
+// Tabel Pembayaran
+model Pembayaran {
+  id              String           @id @default(uuid())
+  siswaId         String           @map("siswa_id")
+  totalTagihan    Int              @map("total_tagihan") // Rp 1.000.000 (L) / Rp 1.200.000 (P)
+  jumlahBayar     Int              @default(0) @map("jumlah_bayar")
+  sisaBayar       Int              @map("sisa_bayar")
+  status          StatusPembayaran @default(BELUM_LUNAS)
+  tanggalBayar    DateTime?        @map("tanggal_bayar")
+  keterangan      String?          @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  siswa         Siswa              @relation(fields: [siswaId], references: [id], onDelete: Cascade)
+  riwayatBayar  RiwayatPembayaran[]
+
+  @@map("pembayaran")
+}
+
+// Tabel Riwayat Pembayaran (untuk angsuran)
+model RiwayatPembayaran {
+  id           String     @id @default(uuid())
+  pembayaranId String     @map("pembayaran_id")
+  jumlah       Int
+  tanggal      DateTime   @default(now())
+  keterangan   String?    @db.Text
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  pembayaran Pembayaran @relation(fields: [pembayaranId], references: [id], onDelete: Cascade)
+
+  @@map("riwayat_pembayaran")
+}
+
+// Tabel Jadwal Ujian
+model JadwalUjian {
+  id          String   @id @default(uuid())
+  namaKegiatan String  @map("nama_kegiatan")
+  tanggal     DateTime
+  waktuMulai  String   @map("waktu_mulai")
+  waktuSelesai String  @map("waktu_selesai")
+  lokasi      String?
+  keterangan  String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("jadwal_ujian")
+}
+
+// Tabel Counter untuk Nomor Registrasi
+model Counter {
+  id      String @id @default(uuid())
+  prefix  String @unique // "RG", "PR", "AF", "GA"
+  tahun   String @db.VarChar(2) // "26" untuk 2026
+  counter Int    @default(0)
+
+  @@unique([prefix, tahun])
+  @@map("counter")
 }
