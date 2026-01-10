@@ -272,3 +272,25 @@ model Counter {
   @@unique([prefix, tahun])
   @@map("counter")
 }
+
+// ==================== TAMBAHAN MASTER DATA ====================
+
+// Tabel Pengaturan Global (Biaya, dll)
+model Pengaturan {
+  id             String   @id @default(uuid())
+  biayaLaki      Int      @default(1000000)
+  biayaPerempuan Int      @default(1200000)
+  updatedAt      DateTime @updatedAt
+
+  @@map("pengaturan")
+}
+
+// Tabel Master Petugas Penerima Uang
+model Petugas {
+  id        String   @id @default(uuid())
+  nama      String
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("petugas")
+}
