@@ -241,6 +241,7 @@ model RiwayatPembayaran {
   jumlah       Int
   tanggal      DateTime   @default(now())
   keterangan   String?    @db.Text
+  petugas      String?
   createdAt    DateTime   @default(now()) @map("created_at")
 
   pembayaran Pembayaran @relation(fields: [pembayaranId], references: [id], onDelete: Cascade)
