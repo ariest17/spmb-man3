@@ -46,6 +46,8 @@ export default function AdminPage() {
   const [selectedSiswa, setSelectedSiswa] = useState(null)
   const [pembayaranData, setPembayaranData] = useState(null)
   const [inputBayar, setInputBayar] = useState('')
+  const [listPetugas, setListPetugas] = useState([]) 
+  const [selectedPetugas, setSelectedPetugas] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
   // --- TAMBAHAN LOGIKA IMPORT GO AKSIO ---
   const [importFile, setImportFile] = useState(null)
@@ -123,7 +125,19 @@ export default function AdminPage() {
   useEffect(() => {
     fetchStatistik()
     fetchSiswa()
+    fetchMasterPetugas() // <--- Tambahan
   }, [filters])
+
+  // --- FUNGSI AMBIL PETUGAS DARI MASTER DATA ---
+  const fetchMasterPetugas = async () => {
+    try {
+      const res = await fetch('/api/admin/master/keuangan')
+      const data = await res.json()
+      if (data.petugas) setListPetugas(data.petugas)
+    } catch (error) {
+      console.error('Gagal load petugas')
+    }
+  }
 
   const fetchStatistik = async () => {
     try {
@@ -206,6 +220,11 @@ export default function AdminPage() {
       toast.error('Masukkan jumlah pembayaran yang valid')
       return
     }
+    // Validasi Petugas Wajib Dipilih
+    if (!selectedPetugas) {
+      toast.error('Harap pilih Petugas Penerima!')
+      return
+    }
 
     setSavingPayment(true)
     try {
@@ -215,19 +234,20 @@ export default function AdminPage() {
         body: JSON.stringify({
           siswaId: selectedSiswa.id,
           jumlahBayar: parseInt(inputBayar),
-          keterangan: 'Pembayaran daftar ulang'
+          keterangan: 'Pembayaran daftar ulang',
+          petugas: selectedPetugas // <--- Kirim Data Petugas
         })
       })
       const result = await res.json()
       if (result.success) {
         toast.success('Pembayaran berhasil dicatat')
-        setPembayaranData(result.data)
-        setInputBayar('')
-        fetchSiswa()
-        // Refresh pembayaran data
+        // Refresh data
         const res2 = await fetch(`/api/pembayaran?siswaId=${selectedSiswa.id}`)
         const result2 = await res2.json()
         setPembayaranData(result2.data)
+        setInputBayar('')
+        fetchSiswa() 
+        fetchStatistik() // Update statistik uang juga
       } else {
         toast.error(result.error)
       }
@@ -561,7 +581,7 @@ export default function AdminPage() {
           <TabsContent value="pembayaran">
             <Card>
               <CardHeader>
-                <CardTitle>Modul Pembayaran</CardTitle>
+                <CardTitle>Transaksi Pembayaran</CardTitle>
                 <CardDescription>Kelola pembayaran daftar ulang siswa yang sudah lulus</CardDescription>
               </CardHeader>
               <CardContent>
@@ -577,48 +597,60 @@ export default function AdminPage() {
                   </Button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto border rounded-lg">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="text-left p-3">No. Reg</th>
-                        <th className="text-left p-3">Nama</th>
-                        <th className="text-left p-3">Gender</th>
-                        <th className="text-left p-3">Tagihan</th>
-                        <th className="text-left p-3">Dibayar</th>
-                        <th className="text-left p-3">Status</th>
-                        <th className="text-left p-3">Aksi</th>
+                    <thead className="bg-gray-100 border-b font-semibold text-gray-700">
+                      <tr>
+                        <th className="p-3 text-left">No. Reg</th>
+                        <th className="p-3 text-left">Nama</th>
+                        <th className="p-3 text-left">Gender</th>
+                        <th className="p-3 text-left">Jalur</th>
+                        <th className="p-3 text-left">Asal Sekolah</th>
+                        <th className="p-3 text-right">Biaya Daftar Ulang</th>
+                        <th className="p-3 text-right">Dibayar</th>
+                        <th className="p-3 text-right">Kurang Bayar</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {siswaList.filter(s => s.status === 'LULUS').map((siswa) => (
-                        <tr key={siswa.id} className="border-b hover:bg-gray-50">
-                          <td className="p-3 font-mono">{siswa.user?.nomorRegistrasi}</td>
-                          <td className="p-3">{siswa.namaLengkap}</td>
-                          <td className="p-3">
-                            {siswa.jenisKelamin === 'LAKI_LAKI' ? 'Laki-laki' : 'Perempuan'}
-                          </td>
-                          <td className="p-3">{formatRupiah(getTagihanByGender(siswa.jenisKelamin))}</td>
-                          <td className="p-3">
-                            {formatRupiah(siswa.pembayaran?.[0]?.jumlahBayar || 0)}
-                          </td>
-                          <td className="p-3">
-                            <Badge className={
-                              siswa.pembayaran?.[0]?.status === 'LUNAS' ? 'bg-green-500' : 'bg-amber-500'
-                            }>
-                              {siswa.pembayaran?.[0]?.status || 'BELUM BAYAR'}
-                            </Badge>
-                          </td>
-                          <td className="p-3">
-                            <Button 
-                              size="sm" 
-                              onClick={() => openPembayaranDialog(siswa)}
-                            >
-                              Input Bayar
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                      {siswaList.filter(s => s.status === 'LULUS').map((siswa) => {
+                        const bayarInfo = siswa.pembayaran?.[0] || {};
+                        const tagihan = bayarInfo.totalTagihan || 0;
+                        const dibayar = bayarInfo.jumlahBayar || 0;
+                        const sisa = tagihan - dibayar;
+                        const statusLunas = bayarInfo.status === 'LUNAS';
+
+                        return (
+                          <tr key={siswa.id} className="border-b hover:bg-gray-50">
+                            <td className="p-3 font-mono">{siswa.user?.nomorRegistrasi}</td>
+                            <td className="p-3 font-medium">{siswa.namaLengkap}</td>
+                            <td className="p-3">{siswa.jenisKelamin === 'LAKI_LAKI' ? 'L' : 'P'}</td>
+                            <td className="p-3"><Badge variant="outline" className="text-xs">{siswa.jalur}</Badge></td>
+                            <td className="p-3 text-gray-600">{siswa.asalSekolah || '-'}</td>
+                            <td className="p-3 text-right font-medium">{formatRupiah(tagihan)}</td>
+                            <td className="p-3 text-right text-green-600">{formatRupiah(dibayar)}</td>
+                            <td className="p-3 text-right text-red-600">{sisa > 0 ? formatRupiah(sisa) : '-'}</td>
+                            <td className="p-3 text-center">
+                              <Badge className={statusLunas ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}>
+                                {statusLunas ? 'LUNAS' : 'BELUM'}
+                              </Badge>
+                            </td>
+                            <td className="p-3 text-center">
+                              <Button 
+                                size="sm" 
+                                onClick={() => {
+                                   openPembayaranDialog(siswa);
+                                   setSelectedPetugas(''); // Reset petugas saat buka baru
+                                }}
+                                className="h-8 text-xs bg-blue-600 hover:bg-blue-700"
+                              >
+                                <DollarSign className="w-3 h-3 mr-1" /> Bayar
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -688,7 +720,7 @@ export default function AdminPage() {
 
       {/* Pembayaran Dialog */}
       <Dialog open={showPembayaranDialog} onOpenChange={setShowPembayaranDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Input Pembayaran</DialogTitle>
             <DialogDescription>
@@ -697,70 +729,79 @@ export default function AdminPage() {
           </DialogHeader>
           
           {selectedSiswa && (
-            <div className="space-y-4">
-              {/* Info Tagihan */}
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Jenis Kelamin</span>
-                  <span className="font-medium">
-                    {selectedSiswa.jenisKelamin === 'LAKI_LAKI' ? 'Laki-laki' : 'Perempuan'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Total Tagihan</span>
-                  <span className="font-bold text-lg">
-                    {formatRupiah(getTagihanByGender(selectedSiswa.jenisKelamin))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Sudah Dibayar</span>
-                  <span className="font-medium text-green-600">
-                    {formatRupiah(pembayaranData?.jumlahBayar || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span className="text-gray-500">Sisa Tagihan</span>
-                  <span className="font-bold text-red-600">
-                    {formatRupiah(pembayaranData?.sisaBayar || getTagihanByGender(selectedSiswa.jenisKelamin))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Status</span>
-                  <Badge className={
-                    pembayaranData?.status === 'LUNAS' ? 'bg-green-500' : 'bg-amber-500'
-                  }>
-                    {pembayaranData?.status || 'BELUM LUNAS'}
-                  </Badge>
+            <div className="space-y-4 py-2">
+              {/* Ringkasan Tagihan */}
+              <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg">
+                <div className="text-gray-500">Total Biaya:</div>
+                <div className="font-bold text-right">{formatRupiah(pembayaranData?.totalTagihan || 0)}</div>
+                <div className="text-gray-500">Sudah Bayar:</div>
+                <div className="font-medium text-green-600 text-right">{formatRupiah(pembayaranData?.jumlahBayar || 0)}</div>
+                <div className="text-gray-500 pt-2 border-t mt-2">Sisa Tagihan:</div>
+                <div className="font-bold text-red-600 text-right pt-2 border-t mt-2">
+                   {formatRupiah(pembayaranData?.sisaBayar ?? (pembayaranData?.totalTagihan || 0))}
                 </div>
               </div>
 
-              {/* Input Pembayaran */}
+              {/* Form Input (Hanya jika belum lunas) */}
               {pembayaranData?.status !== 'LUNAS' && (
-                <div className="space-y-2">
-                  <Label>Jumlah Pembayaran</Label>
-                  <Input 
-                    type="number"
-                    value={inputBayar}
-                    onChange={(e) => setInputBayar(e.target.value)}
-                    placeholder="Masukkan jumlah pembayaran"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label>Jumlah Bayar (Rp)</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="Contoh: 500000"
+                      value={inputBayar}
+                      onChange={(e) => setInputBayar(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Petugas Penerima</Label>
+                    <Select value={selectedPetugas} onValueChange={setSelectedPetugas}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih Petugas..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {listPetugas.length === 0 ? (
+                           <SelectItem value="Admin" disabled>Belum ada petugas (Isi Master Data dulu)</SelectItem>
+                        ) : (
+                           listPetugas.map((p) => (
+                              <SelectItem key={p.id} value={p.nama}>{p.nama}</SelectItem>
+                           ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
 
-              {/* Riwayat Pembayaran */}
-              {pembayaranData?.riwayatBayar?.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Riwayat Pembayaran</Label>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {pembayaranData.riwayatBayar.map((riwayat, idx) => (
-                      <div key={idx} className="flex justify-between text-sm bg-gray-50 p-2 rounded">
-                        <span>{new Date(riwayat.tanggal).toLocaleDateString('id-ID')}</span>
-                        <span className="font-medium text-green-600">{formatRupiah(riwayat.jumlah)}</span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Tabel Riwayat Transaksi */}
+              <div className="space-y-2">
+                <Label>Riwayat Transaksi</Label>
+                <div className="border rounded-md overflow-hidden text-xs">
+                   <table className="w-full">
+                      <thead className="bg-gray-100">
+                         <tr>
+                            <th className="p-2 text-left">Tgl</th>
+                            <th className="p-2 text-right">Nominal</th>
+                            <th className="p-2 text-right">Petugas</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {pembayaranData?.riwayatBayar?.map((r, idx) => (
+                            <tr key={idx} className="border-t">
+                               <td className="p-2">{new Date(r.tanggal).toLocaleDateString('id-ID')}</td>
+                               <td className="p-2 text-right font-medium">{formatRupiah(r.jumlah)}</td>
+                               <td className="p-2 text-right text-gray-500">{r.petugas || '-'}</td>
+                            </tr>
+                         ))}
+                         {(!pembayaranData?.riwayatBayar || pembayaranData.riwayatBayar.length === 0) && (
+                            <tr><td colSpan="3" className="p-2 text-center text-gray-400">Belum ada transaksi</td></tr>
+                         )}
+                      </tbody>
+                   </table>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -769,7 +810,7 @@ export default function AdminPage() {
               Tutup
             </Button>
             {pembayaranData?.status !== 'LUNAS' && (
-              <Button onClick={handleSavePembayaran} disabled={savingPayment} className="gap-2">
+              <Button onClick={handleSavePembayaran} disabled={savingPayment} className="gap-2 bg-blue-600 hover:bg-blue-700">
                 {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                 Simpan Pembayaran
               </Button>
