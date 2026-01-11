@@ -10,8 +10,9 @@ export async function GET() {
       create: { id: "default-config", biayaLaki: 1000000, biayaPerempuan: 1200000 },
       update: {},
     });
-    const petugas = await prisma.petugas.findMany({ orderBy: { createdAt: 'desc' } });
-    return NextResponse.json({ settings, petugas });
+    
+    // UPDATE: Hanya kembalikan settings, jangan panggil prisma.petugas lagi
+    return NextResponse.json({ settings });
   } catch (error) {
     return NextResponse.json({ error: "Gagal memuat data" }, { status: 500 });
   }
