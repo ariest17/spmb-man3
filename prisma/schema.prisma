@@ -13,25 +13,16 @@ datasource db {
 // ==================== ENUMS ====================
 
 enum Role {
-  ADMIN
-  SISWA
+  SUPERADMIN    // Akses penuh (Manajemen User)
+  ADMIN         // Admin umum
+  VERIFIKATOR   // Petugas seleksi berkas
+  BENDAHARA     // Petugas pembayaran
+  SISWA         // Pendaftar
 }
 
 enum JenisKelamin {
   LAKI_LAKI
   PEREMPUAN
-}
-
-enum Jalur {
-  REGULER
-  PRESTASI
-  AFIRMASI
-  GO_AKSIO
-}
-
-enum Peminatan {
-  UMUM
-  AGAMA
 }
 
 enum StatusSiswa {
@@ -60,8 +51,9 @@ enum StatusPembayaran {
 // Tabel User untuk Autentikasi
 model User {
   id              String   @id @default(uuid())
-  nomorRegistrasi String   @unique @map("nomor_registrasi")
+  nomorRegistrasi String   @unique @map("nomor_registrasi") // Username Login
   password        String
+  nama            String?  @map("nama_lengkap") // Nama asli petugas/admin
   role            Role     @default(SISWA)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -78,8 +70,8 @@ model Siswa {
   namaLengkap   String       @map("nama_lengkap")
   email         String       @unique
   jenisKelamin  JenisKelamin @map("jenis_kelamin")
-  jalur         Jalur
-  peminatan     Peminatan
+  jalur         String
+  peminatan     String
   status        StatusSiswa  @default(SELEKSI)
   
   // Data Tambahan (diisi saat daftar ulang)
@@ -241,7 +233,7 @@ model RiwayatPembayaran {
   jumlah       Int
   tanggal      DateTime   @default(now())
   keterangan   String?    @db.Text
-  petugas      String?
+  petugas      String?    // Nama petugas yang menerima (diambil dari User.nama)
   createdAt    DateTime   @default(now()) @map("created_at")
 
   pembayaran Pembayaran @relation(fields: [pembayaranId], references: [id], onDelete: Cascade)
@@ -286,12 +278,30 @@ model Pengaturan {
   @@map("pengaturan")
 }
 
-// Tabel Master Petugas Penerima Uang
-model Petugas {
-  id        String   @id @default(uuid())
-  nama      String
-  aktif     Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
+// Tabel Kuota (BARU: Untuk Manajemen Pendaftaran)
+model Kuota {
+  id        String    @id @default(uuid())
+  jalur     String
+  peminatan String
+  jumlah    Int       @default(0) // Jumlah kursi tersedia
+  updatedAt DateTime  @updatedAt
 
-  @@map("petugas")
+  @@unique([jalur, peminatan]) // Mencegah duplikasi aturan
+  @@map("kuota")
+}
+
+// Tabel Master Jalur (Dinamic)
+model MasterJalur {
+  id      String @id @default(uuid())
+  nama    String @unique
+  aktif   Boolean @default(true)
+  @@map("master_jalur")
+}
+
+// Tabel Master Peminatan (Dinamic)
+model MasterPeminatan {
+  id      String @id @default(uuid())
+  nama    String @unique
+  aktif   Boolean @default(true)
+  @@map("master_peminatan")
 }
