@@ -24,7 +24,8 @@ import { Label } from '@/components/ui/label'
 import { 
   GraduationCap, LogOut, Users, CreditCard, BarChart3, Upload, 
   Search, Loader2, CheckCircle, XCircle, TrendingUp, UserCheck,
-  DollarSign, FileSpreadsheet, Database
+  DollarSign, FileSpreadsheet, Database, 
+  Settings, LayoutGrid, Trash2, Plus
 } from 'lucide-react'
 
 export default function AdminPage() {
@@ -52,6 +53,22 @@ export default function AdminPage() {
   // --- TAMBAHAN LOGIKA IMPORT GO AKSIO ---
   const [importFile, setImportFile] = useState(null)
   const [importing, setImporting] = useState(false)
+  // --- TAMBAHAN STATE MASTER DATA ---
+  const [masterUsers, setMasterUsers] = useState([])
+  const [masterBiaya, setMasterBiaya] = useState({ biayaLaki: 0, biayaPerempuan: 0 })
+  const [masterKuota, setMasterKuota] = useState([])
+  const [masterRuang, setMasterRuang] = useState([])
+  const [listJalur, setListJalur] = useState([]) 
+  const [listPeminatan, setListPeminatan] = useState([])
+  const [newJalur, setNewJalur] = useState('')
+  const [newPeminatan, setNewPeminatan] = useState('')
+  
+  // State Form Input Master
+  const [newUser, setNewUser] = useState({ nama: '', username: '', password: '', role: 'VERIFIKATOR' })
+  const [newRuang, setNewRuang] = useState({ namaRuang: '', kapasitas: 30 })
+  const [showUserDialog, setShowUserDialog] = useState(false)
+  const [isSavingMaster, setIsSavingMaster] = useState(false)
+  // ----------------------------------
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -111,6 +128,146 @@ export default function AdminPage() {
 
     reader.readAsBinaryString(importFile)
   }
+// --- LOGIKA MASTER DATA BARU ---
+  
+  // 1. Fetcher (Ambil Data)
+  useEffect(() => {
+    if (activeTab === 'master-data') {
+      fetchMasterUsers()
+      fetchMasterPendaftaran()
+      fetchMasterBiaya()
+    }
+  }, [activeTab])
+
+  const fetchMasterUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/master/users')
+      const data = await res.json()
+      if (Array.isArray(data)) setMasterUsers(data)
+    } catch (err) { console.error(err) }
+  }
+
+  const fetchMasterPendaftaran = async () => {
+    try {
+      const res = await fetch('/api/admin/master/pendaftaran')
+      const data = await res.json()
+      if (data.kuota) setMasterKuota(data.kuota)
+      if (data.ruang) setMasterRuang(data.ruang)
+      if (data.listJalur) setListJalur(data.listJalur) 
+      if (data.listPeminatan) setListPeminatan(data.listPeminatan)
+    } catch (err) { console.error(err) }
+  }
+
+  const fetchMasterBiaya = async () => {
+    try {
+      const res = await fetch('/api/admin/master/keuangan')
+      const data = await res.json()
+      if (data.settings) setMasterBiaya(data.settings)
+    } catch (err) { console.error(err) }
+  }
+
+  // 2. Handler User (Tambah & Hapus)
+  const handleAddUser = async () => {
+    if(!newUser.username || !newUser.password || !newUser.nama) return toast.error("Data tidak lengkap")
+    setIsSavingMaster(true)
+    try {
+      const res = await fetch('/api/admin/master/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'create', data: newUser })
+      })
+      if(res.ok) {
+        toast.success("User berhasil dibuat")
+        setNewUser({ nama: '', username: '', password: '', role: 'VERIFIKATOR' })
+        setShowUserDialog(false)
+        fetchMasterUsers()
+      } else {
+        const err = await res.json()
+        toast.error(err.error)
+      }
+    } catch(e) { toast.error("Gagal menambah user") }
+    finally { setIsSavingMaster(false) }
+  }
+
+  const handleDeleteUser = async (id) => {
+    if(!confirm("Hapus user ini?")) return
+    await fetch('/api/admin/master/users', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ action: 'delete', data: {id} })
+    })
+    fetchMasterUsers()
+  }
+
+  // Handler Master Jalur & Peminatan
+  const handleAddMaster = async (type, nama, setter) => {
+    if(!nama) return
+    await fetch('/api/admin/master/pendaftaran', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ type, data: { nama } })
+    })
+    setter('') // Kosongkan input
+    fetchMasterPendaftaran() // Refresh data
+    toast.success("Berhasil ditambahkan")
+  }
+
+  const handleDeleteMaster = async (type, id) => {
+    if(!confirm("Hapus data ini?")) return
+    await fetch('/api/admin/master/pendaftaran', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ type, data: { id } })
+    })
+    fetchMasterPendaftaran()
+  }
+
+  // 3. Handler Kuota & Ruang
+  const handleSaveKuota = async (jalur, peminatan, jumlah) => {
+    try {
+      await fetch('/api/admin/master/pendaftaran', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ type: 'kuota', data: { jalur, peminatan, jumlah } })
+      })
+      toast.success("Kuota disimpan")
+    } catch(e) { toast.error("Gagal simpan kuota") }
+  }
+
+  const handleAddRuang = async () => {
+    if(!newRuang.namaRuang) return
+    await fetch('/api/admin/master/pendaftaran', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'tambah_ruang', data: newRuang })
+    })
+    setNewRuang({ namaRuang: '', kapasitas: 30 })
+    fetchMasterPendaftaran()
+    toast.success("Ruang ditambah")
+  }
+
+  const handleDeleteRuang = async (id) => {
+    if(!confirm("Hapus ruang ini?")) return
+    await fetch('/api/admin/master/pendaftaran', {
+      method: 'POST',
+      body: JSON.stringify({ type: 'hapus_ruang', data: {id} })
+    })
+    fetchMasterPendaftaran()
+  }
+
+  // 4. Handler Biaya
+  const handleSimpanBiaya = async (e) => {
+    e.preventDefault()
+    setIsSavingMaster(true)
+    try {
+      await fetch("/api/admin/master/keuangan", {
+        method: "POST",
+        body: JSON.stringify({ action: "update_biaya", data: masterBiaya }),
+      })
+      toast.success("Biaya diperbarui")
+    } catch(e) { toast.error("Gagal update biaya") }
+    finally { setIsSavingMaster(false) }
+  }
+
   // --- AKHIR TAMBAHAN ---
 
   useEffect(() => {
@@ -369,11 +526,9 @@ export default function AdminPage() {
             <TabsTrigger value="import" className="gap-2">
               <Upload className="w-4 h-4" /> Import
             </TabsTrigger>
-            <Link href="/admin/master-data">
-              <div className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-background/50 hover:text-accent-foreground ml-2 cursor-pointer border border-transparent hover:border-gray-200">
-                <Database className="w-4 h-4 mr-2" /> Master Data
-              </div>
-            </Link>
+            <TabsTrigger value="master-data" className="gap-2 data-[state=active]:bg-green-100 data-[state=active]:text-green-800">
+              <Database className="w-4 h-4"/> Master Data
+            </TabsTrigger>
           </TabsList>
 
           {/* Tab Statistik */}
@@ -715,6 +870,153 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* --- KONTEN TAB MASTER DATA (SUB-TAB) --- */}
+          <TabsContent value="master-data">
+             <div className="grid gap-6">
+               <Tabs defaultValue="user" className="w-full">
+                 <div className="flex justify-between items-center mb-4 bg-white p-3 rounded-lg border">
+                   <h2 className="text-lg font-bold flex items-center gap-2"><Settings className="w-5 h-5"/> Pusat Pengaturan</h2>
+                   <TabsList>
+                      <TabsTrigger value="user" className="gap-2">User</TabsTrigger>
+                      <TabsTrigger value="pendaftaran" className="gap-2">Pendaftaran</TabsTrigger>
+                      <TabsTrigger value="daftar-ulang" className="gap-2">Daftar Ulang</TabsTrigger>
+                   </TabsList>
+                 </div>
+
+                 {/* SUB-TAB 1: MANAJEMEN USER */}
+                 <TabsContent value="user">
+                   <Card>
+                     <CardHeader className="flex flex-row items-center justify-between">
+                       <div><CardTitle>Akun Petugas</CardTitle><CardDescription>Kelola akun verifikator & bendahara</CardDescription></div>
+                       <Button onClick={() => setShowUserDialog(true)} className="gap-2 bg-green-600 hover:bg-green-700"><Plus className="w-4 h-4"/> Tambah</Button>
+                     </CardHeader>
+                     <CardContent>
+                       <table className="w-full text-sm text-left">
+                         <thead className="bg-gray-50 border-b">
+                           <tr><th className="p-3">Nama Lengkap</th><th className="p-3">Username</th><th className="p-3">Role</th><th className="p-3">Aksi</th></tr>
+                         </thead>
+                         <tbody>
+                           {masterUsers.map(u => (
+                             <tr key={u.id} className="border-b">
+                               <td className="p-3">{u.nama}</td>
+                               <td className="p-3 font-mono">{u.nomorRegistrasi}</td>
+                               <td className="p-3"><Badge>{u.role}</Badge></td>
+                               <td className="p-3">
+                                 {u.role !== 'SUPERADMIN' && (
+                                   <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(u.id)} className="text-red-500"><Trash2 className="w-4 h-4"/></Button>
+                                 )}
+                               </td>
+                             </tr>
+                           ))}
+                         </tbody>
+                       </table>
+                     </CardContent>
+                   </Card>
+                 </TabsContent>
+
+                 {/* SUB-TAB 2: PENDAFTARAN */}
+                 <TabsContent value="pendaftaran" className="space-y-6">
+                   
+                   {/* MANAGEMEN MASTER JALUR & PEMINATAN (BARU) */}
+                   <div className="grid md:grid-cols-2 gap-6">
+                      <Card>
+                        <CardHeader className="pb-2"><CardTitle className="text-sm">Master Jalur</CardTitle></CardHeader>
+                        <CardContent>
+                           <div className="flex gap-2 mb-3">
+                              <Input placeholder="Nama Jalur (Ex: KHUSUS)" value={newJalur} onChange={e=>setNewJalur(e.target.value)} className="h-8 text-xs"/>
+                              <Button size="sm" onClick={()=>handleAddMaster('tambah_jalur', newJalur, setNewJalur)} className="h-8"><Plus className="w-3 h-3"/></Button>
+                           </div>
+                           <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {listJalur.map(j => (
+                                <div key={j.id} className="flex justify-between items-center bg-gray-50 p-2 rounded text-xs">
+                                   <span>{j.nama}</span>
+                                   <Trash2 className="w-3 h-3 text-red-400 cursor-pointer" onClick={()=>handleDeleteMaster('hapus_jalur', j.id)}/>
+                                </div>
+                              ))}
+                           </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="pb-2"><CardTitle className="text-sm">Master Peminatan</CardTitle></CardHeader>
+                        <CardContent>
+                           <div className="flex gap-2 mb-3">
+                              <Input placeholder="Nama Peminatan (Ex: BAHASA)" value={newPeminatan} onChange={e=>setNewPeminatan(e.target.value)} className="h-8 text-xs"/>
+                              <Button size="sm" onClick={()=>handleAddMaster('tambah_peminatan', newPeminatan, setNewPeminatan)} className="h-8"><Plus className="w-3 h-3"/></Button>
+                           </div>
+                           <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {listPeminatan.map(p => (
+                                <div key={p.id} className="flex justify-between items-center bg-gray-50 p-2 rounded text-xs">
+                                   <span>{p.nama}</span>
+                                   <Trash2 className="w-3 h-3 text-red-400 cursor-pointer" onClick={()=>handleDeleteMaster('hapus_peminatan', p.id)}/>
+                                </div>
+                              ))}
+                           </div>
+                        </CardContent>
+                      </Card>
+                   </div>
+
+                   {/* SETTING KUOTA (UPDATE: LOOPING DARI DATABASE) */}
+                   <Card>
+                     <CardHeader><CardTitle>Setting Kuota Per Jalur</CardTitle><CardDescription>Kombinasi Jalur & Peminatan</CardDescription></CardHeader>
+                     <CardContent>
+                       <div className="grid grid-cols-2 gap-4">
+                         {listJalur.map(jalur => (
+                           listPeminatan.map(peminatan => {
+                             const key = `${jalur.nama}_${peminatan.nama}`
+                             const current = masterKuota.find(k => k.jalur === jalur.nama && k.peminatan === peminatan.nama)
+                             return (
+                               <div key={key} className="flex items-center justify-between border p-3 rounded">
+                                 <span className="text-xs font-bold text-gray-600">{jalur.nama} - {peminatan.nama}</span>
+                                 <div className="flex gap-2 items-center">
+                                   <Input type="number" className="w-20 h-8" defaultValue={current?.jumlah || 0} 
+                                      onBlur={(e) => handleSaveKuota(jalur.nama, peminatan.nama, e.target.value)} />
+                                   <span className="text-xs text-gray-400">Kursi</span>
+                                 </div>
+                               </div>
+                             )
+                           })
+                         ))}
+                       </div>
+                     </CardContent>
+                   </Card>
+
+                   {/* SETTING RUANG UJIAN (TETAP) */}
+                   <Card>
+                       <CardHeader className="flex flex-row items-center justify-between pb-2">
+                         <CardTitle className="text-sm">Data Ruang Ujian</CardTitle>
+                         <div className="flex gap-2">
+                            <Input placeholder="Nama Ruang" value={newRuang.namaRuang} onChange={e => setNewRuang({...newRuang, namaRuang: e.target.value})} className="w-32 h-8 text-xs"/>
+                            <Button size="sm" onClick={handleAddRuang} className="h-8"><Plus className="w-3 h-3"/></Button>
+                         </div>
+                       </CardHeader>
+                       <CardContent className="h-48 overflow-y-auto">
+                         {masterRuang.map(r => (
+                           <div key={r.id} className="flex justify-between items-center py-2 border-b text-sm">
+                             <span>{r.namaRuang} (Kaps: {r.kapasitas})</span>
+                             <Trash2 className="w-4 h-4 text-gray-300 hover:text-red-500 cursor-pointer" onClick={() => handleDeleteRuang(r.id)}/>
+                           </div>
+                         ))}
+                       </CardContent>
+                   </Card>
+                 </TabsContent>
+
+                 {/* SUB-TAB 3: DAFTAR ULANG */}
+                 <TabsContent value="daftar-ulang">
+                   <Card>
+                     <CardHeader><CardTitle>Setting Nominal Daftar Ulang</CardTitle></CardHeader>
+                     <CardContent>
+                       <form onSubmit={handleSimpanBiaya} className="max-w-md space-y-4">
+                         <div><Label>Biaya Laki-laki</Label><Input type="number" value={masterBiaya.biayaLaki} onChange={(e) => setMasterBiaya({...masterBiaya, biayaLaki: e.target.value})}/></div>
+                         <div><Label>Biaya Perempuan</Label><Input type="number" value={masterBiaya.biayaPerempuan} onChange={(e) => setMasterBiaya({...masterBiaya, biayaPerempuan: e.target.value})}/></div>
+                         <Button type="submit" disabled={isSavingMaster}>Simpan Perubahan</Button>
+                       </form>
+                     </CardContent>
+                   </Card>
+                 </TabsContent>
+               </Tabs>
+             </div>
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -816,6 +1118,28 @@ export default function AdminPage() {
               </Button>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* DIALOG TAMBAH USER (MASTER DATA) */}
+      <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Tambah Petugas Baru</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Nama Lengkap</Label><Input value={newUser.nama} onChange={e => setNewUser({...newUser, nama: e.target.value})}/></div>
+            <div><Label>Username</Label><Input value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}/></div>
+            <div><Label>Password</Label><Input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}/></div>
+            <div><Label>Role</Label>
+              <Select value={newUser.role} onValueChange={v => setNewUser({...newUser, role: v})}>
+                <SelectTrigger><SelectValue/></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VERIFIKATOR">Verifikator (Berkas)</SelectItem>
+                  <SelectItem value="BENDAHARA">Bendahara (Keuangan)</SelectItem>
+                  <SelectItem value="SUPERADMIN">Superadmin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter><Button onClick={handleAddUser} disabled={isSavingMaster}>Buat Akun</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
