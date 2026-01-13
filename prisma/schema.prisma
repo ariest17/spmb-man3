@@ -273,6 +273,7 @@ model Pengaturan {
   id             String   @id @default(uuid())
   biayaLaki      Int      @default(1000000)
   biayaPerempuan Int      @default(1200000)
+  tampilkanKuota Boolean  @default(true)
   updatedAt      DateTime @updatedAt
 
   @@map("pengaturan")
@@ -295,6 +296,8 @@ model MasterJalur {
   id      String @id @default(uuid())
   nama    String @unique
   aktif   Boolean @default(true)
+  tanggalBuka  DateTime?
+  tanggalTutup DateTime?
   @@map("master_jalur")
 }
 
