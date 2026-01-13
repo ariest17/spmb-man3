@@ -274,6 +274,7 @@ model Pengaturan {
   biayaLaki      Int      @default(1000000)
   biayaPerempuan Int      @default(1200000)
   tampilkanKuota Boolean  @default(true)
+  kopHeader      String?
   updatedAt      DateTime @updatedAt
 
   @@map("pengaturan")
